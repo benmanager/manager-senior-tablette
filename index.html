@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manager Sénior</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #000;
+      color: #fff;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 20px 24px;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+    }
+    .name-banner {
+      font-size: 2.8rem;
+      font-weight: 800;
+      text-align: center;
+      color: #f8fafc;
+      margin-bottom: 6px;
+      text-shadow: 0 0 10px rgba(255,255,255,0.2);
+    }
+    .sos-button {
+      background: rgba(255,50,50,0.9);
+      color: white;
+      border: none;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      font-size: 1.4rem;
+      cursor: pointer;
+      z-index: 101;
+    }
+    .ok-button {
+      background: rgba(34, 197, 94, 0.9);
+      color: white;
+      border: none;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      font-size: 1.2rem;
+      cursor: pointer;
+      z-index: 101;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .clock-box { text-align: center; margin-top: 8px; }
+    .clock { font-size: 1.5rem; font-weight: 700; }
+    .date { font-size: 1.1rem; }
+
+    .slideshow {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      cursor: pointer;
+    }
+    .slideshow img {
+      max-width: 98%;
+      max-height: 90%;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 0 30px rgba(255,255,255,0.1);
+    }
+
+    .contacts-overlay {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      border-radius: 20px;
+      padding: 20px;
+      max-height: 80vh;
+      max-width: 90vw;
+      overflow-y: auto;
+      z-index: 90;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .contact-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .contact-photo {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .call-button {
+      background: #4f46e5;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .alert-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #dc2626;
+      color: white;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      text-align: center;
+      padding: 20px;
+    }
+    .alert-text {
+      font-size: 4.2rem;
+      font-weight: 800;
+      margin-bottom: 30px;
+      text-shadow: 0 0 10px rgba(0,0,0,0.5);
+      line-height: 1.1;
+    }
+    .alert-close {
+      background: white;
+      color: #dc2626;
+      border: none;
+      padding: 18px 36px;
+      border-radius: 30px;
+      font-size: 1.6rem;
+      cursor: pointer;
+      width: 80%;
+      max-width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar" id="topBar">
+    <button class="sos-button" onclick="sendEmergencyAlert()">🆘</button>
+    <div class="clock-box">
+      <div class="name-banner">Bonjour Myrianne</div>
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date">Chargement...</div>
+    </div>
+    <button id="okButton" class="ok-button">✅</button>
+  </div>
+
+  <div id="slideshow" class="slideshow" onclick="pauseSlideshowTemporarily()">
+    <img id="slideshowImage" src="" alt="Diaporama">
+  </div>
+
+  <div id="contactsOverlay" class="contacts-overlay"></div>
+
+  <div id="alertOverlay" class="alert-overlay">
+    <div class="alert-text" id="alertText">Médicaments !</div>
+    <button class="alert-close" onclick="closeAlert()">Fermer</button>
+  </div>
+
+  <script>
+    // 🔐 Chargement des secrets Twilio
+    let TWILIO_CONFIG;
+
+    // Tente de charger config.js (uniquement en local)
+    fetch('config.js')
+      .then(r => r.text())
+      .then(code => {
+        eval(code); // ⚠️ Ne fait cela que si tu es seul à avoir accès au code
+        TWILIO_CONFIG = TWILIO;
+      })
+      .catch(() => {
+        console.warn("⚠️ config.js non trouvé — fonctionnalités Twilio désactivées");
+        TWILIO_CONFIG = {
+          sid: "",
+          token: "",
+          from: "",
+          to: "",
+          address: ""
+        };
+      });
+
+    const CONFIG = {
+      contactsUrl: "https://gist.githubusercontent.com/benmanager/da95f2da3ec4ddaffc52e3bd34bfd378/raw/contacts.json",
+      remindersUrl: "https://gist.githubusercontent.com/benmanager/3dfb352e5785852810c404c4677609be/raw/rappels.json",
+      birthdaysUrl: "https://gist.githubusercontent.com/benmanager/4700824ff52de1824320cd4c6b307baa/raw/anniversaires.json",
+      photosUrl: "https://gist.githubusercontent.com/benmanager/4e4573f17ffe42055337add296f9dcf8/raw/photos.json",
+      alertsUrl: "https://gist.githubusercontent.com/benmanager/e82bd06a735c51e6bb40df788765af3f/raw/alerts.json",
+      displayUrl: "https://gist.githubusercontent.com/benmanager/a64159d00522573cee7e6f325832d40c/raw/display.json"
+    };
+
+    let slideshowActive = false;
+    let slideshowInterval = null;
+    let photos = [];
+    let slideshowPaused = false;
+
+    // 🖼️ Chargement des réglages
+    async function loadDisplaySettings() {
+      try {
+        const res = await fetch(CONFIG.displayUrl + "?t=" + Date.now());
+        if (!res.ok) throw new Error("Pas de réglages");
+        const settings = await res.json();
+        document.body.style.fontSize = 
+          settings.fontSize === "small" ? "1.0rem" :
+          settings.fontSize === "large" ? "1.4rem" : "1.2rem";
+      } catch (e) { console.log("Pas de display.json"); }
+    }
+
+    // 🖼️ Diaporama
+    async function loadPhotos() {
+      try {
+        const data = await fetchJson(CONFIG.photosUrl);
+        photos = data.photos || [];
+        if (photos.length > 0) startSlideshow();
+      } catch (e) { console.error("Photos:", e); }
+    }
+
+    function startSlideshow() {
+      clearInterval(slideshowInterval);
+      slideshowActive = true;
+      slideshowPaused = false;
+      document.getElementById('topBar').style.display = 'none';
+      document.getElementById('slideshow').style.display = 'flex';
+      
+      let index = 0;
+      slideshowInterval = setInterval(() => {
+        if (photos.length === 0 || slideshowPaused) return;
+        document.getElementById('slideshowImage').src = photos[index];
+        index = (index + 1) % photos.length;
+      }, 10000);
+      
+      if (photos.length > 0) {
+        document.getElementById('slideshowImage').src = photos[0];
+      }
+    }
+
+    function pauseSlideshowTemporarily() {
+      slideshowPaused = true;
+      document.getElementById('topBar').style.display = 'flex';
+      setTimeout(() => {
+        if (slideshowActive) {
+          slideshowPaused = false;
+          document.getElementById('topBar').style.display = 'none';
+        }
+      }, 5000);
+    }
+
+    // 🗣️ Synthèse vocale fiable
+    function speak(text) {
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'fr-FR';
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        speechSynthesis.speak(utterance);
+      }
+    }
+
+    // 🔊 Son d'alerte
+    function playAlertSound() {
+      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+      audio.play().catch(() => {});
+    }
+
+    // 🚨 Alertes
+    function showAlert(message) {
+      clearInterval(slideshowInterval);
+      slideshowActive = false;
+      document.getElementById('topBar').style.display = 'flex';
+      document.getElementById('alertText').textContent = message;
+      document.getElementById('alertOverlay').style.display = 'flex';
+      playAlertSound();
+      speak(message);
+    }
+
+    function closeAlert() {
+      document.getElementById('alertOverlay').style.display = 'none';
+      if (photos.length > 0) {
+        startSlideshow();
+      }
+    }
+
+    // SOS
+    async function sendEmergencyAlert() {
+      // Vérifie que Twilio est configuré
+      if (!TWILIO_CONFIG.sid || !TWILIO_CONFIG.token) {
+        alert("❌ Twilio non configuré — veuillez vérifier config.js");
+        return;
+      }
+
+      const message = `🚨 ALERTE URGENCE\nJe suis en danger.\nAdresse : ${TWILIO_CONFIG.address}`;
+      try {
+        const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_CONFIG.sid}/Messages.json`;
+        const data = new URLSearchParams({ To: TWILIO_CONFIG.to, From: TWILIO_CONFIG.from, Body: message });
+        await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${TWILIO_CONFIG.sid}:${TWILIO_CONFIG.token}`),
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: data
+        });
+      } catch (e) { console.error("Erreur Twilio:", e); }
+      showAlert("ALERTE D'URGENCE ENVOYÉE !");
+    }
+
+    // ✅ Bouton "Je vais bien" (appui long)
+    let pressTimer;
+    document.getElementById('okButton').addEventListener('mousedown', () => {
+      pressTimer = setTimeout(() => {
+        const message = "✅ Je vais bien – Myrianne";
+        const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_CONFIG.sid}/Messages.json`;
+        const data = new URLSearchParams({ To: TWILIO_CONFIG.to, From: TWILIO_CONFIG.from, Body: message });
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${TWILIO_CONFIG.sid}:${TWILIO_CONFIG.token}`),
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: data
+        });
+        document.getElementById('okButton').innerHTML = '💙';
+        setTimeout(() => document.getElementById('okButton').innerHTML = '✅', 2000);
+      }, 5000);
+    });
+    document.getElementById('okButton').addEventListener('mouseup', () => {
+      clearTimeout(pressTimer);
+    });
+
+    // Contacts (double-tap)
+    document.body.addEventListener('dblclick', () => {
+      const overlay = document.getElementById('contactsOverlay');
+      if (overlay.style.display === 'flex') {
+        overlay.style.display = 'none';
+        return;
+      }
+      loadContactsForOverlay();
+      overlay.style.display = 'flex';
+      setTimeout(() => { overlay.style.display = 'none'; }, 12000);
+    });
+
+    async function loadContactsForOverlay() {
+      try {
+        const data = await fetchJson(CONFIG.contactsUrl);
+        const container = document.getElementById('contactsOverlay');
+        container.innerHTML = data.contacts.map(contact => `
+          <div class="contact-card">
+            <img src="${contact.photo || 'https://via.placeholder.com/80'}" class="contact-photo" onerror="this.src='https://via.placeholder.com/80?text=Photo'">
+            <div class="font-bold text-xl">${contact.name}</div>
+            ${contact.phone ? `<button class="call-button" onclick="callPhone('${contact.phone}')">📞 Appel</button>` : ''}
+            ${contact.video ? `<button class="call-button" onclick="callVideo('${contact.video}')">📹 Vidéo</button>` : ''}
+          </div>
+        `).join('');
+      } catch (e) { console.error("Contacts:", e); }
+    }
+
+    function callPhone(phone) { window.location.href = `tel:${phone}`; }
+    function callVideo(url) {
+      if (url.includes('wa.me')) {
+        const phoneNumber = url.match(/wa\.me\/(\d+)/)?.[1];
+        if (phoneNumber) {
+          window.location.href = `whatsapp://send?phone=${phoneNumber}`;
+          setTimeout(() => window.location.href = `https://api.whatsapp.com/send?phone=${phoneNumber}`, 800);
+        }
+      }
+    }
+
+    // Horloge
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('date').textContent = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Alertes auto
+    async function checkReminders() {
+      try {
+        const now = new Date();
+        const currentTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const reminders = await fetchJson(CONFIG.remindersUrl);
+        for (const r of reminders.reminders || []) {
+          const jour = r.jour?.toLowerCase();
+          if ((jour === 'tous' || jour === now.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase()) && r.heure === currentTime) {
+            showAlert(r.texte);
+            return;
+          }
+        }
+        const birthdays = await fetchJson(CONFIG.birthdaysUrl);
+        for (const b of birthdays.birthdays || []) {
+          const birthDate = new Date(b.date);
+          if (birthDate.getMonth() === now.getMonth() && birthDate.getDate() === now.getDate()) {
+            showAlert(`🎂 ANNIVERSAIRE ${b.nom.toUpperCase()} !`);
+            return;
+          }
+        }
+      } catch (e) { console.error("Alertes:", e); }
+    }
+
+    // Alertes manuelles
+    let lastAlertTimestamp = 0;
+    async function checkManualAlert() {
+      try {
+        const data = await fetchJson(CONFIG.alertsUrl + "?t=" + Date.now());
+        if (data.alert && data.timestamp > lastAlertTimestamp) {
+          lastAlertTimestamp = data.timestamp;
+          showAlert(data.alert);
+        }
+      } catch (e) { console.error("Alerte manuelle:", e); }
+    }
+
+    async function fetchJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Erreur ${response.status}`);
+      return await response.json();
+    }
+
+    // Démarrage
+    async function init() {
+      await loadDisplaySettings();
+      await loadPhotos();
+      checkReminders();
+      setInterval(checkReminders, 30000);
+      setInterval(checkManualAlert, 10000);
+    }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
