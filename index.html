@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manager Sénior</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background: #000; color: #fff; margin: 0; padding: 0; overflow: hidden; touch-action: manipulation; }
+    .top-bar { position: fixed; top: 10px; left: 10px; z-index: 100; }
+    .sos-button, .ok-button {
+      width: 56px; height: 56px; border-radius: 50%; border: none; font-size: 1.4rem; cursor: pointer;
+    }
+    .sos-button { background: rgba(255,50,50,0.9); color: white; }
+    .ok-button { background: rgba(34,197,94,0.9); color: white; }
+    .datetime-top {
+      position: fixed; top: 12px; left: 50%;
+      transform: translateX(-50%); z-index: 99;
+      text-align: center;
+      cursor: pointer; /* Important pour tactile */
+      user-select: none;
+      padding: 8px;
+    }
+    .datetime-bottom {
+      position: fixed; bottom: 20px; right: 20px;
+      font-size: 1.2rem; z-index: 95; display: none;
+    }
+    .slideshow-toggle {
+      position: fixed; top: 10px; right: 10px; z-index: 100;
+    }
+    .slideshow {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #000; display: none; justify-content: center;
+      align-items: center; z-index: 10;
+    }
+    .slideshow img {
+      max-width: 95%; max-height: 90%; object-fit: contain;
+      border-radius: 8px;
+    }
+    .contacts-grid {
+      position: fixed; top: 80px; left: 20px; right: 20px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px; z-index: 90; padding: 20px;
+      background: rgba(0,0,0,0.7); border-radius: 12px;
+    }
+    .contact-card {
+      background: #1e293b; padding: 12px; border-radius: 12px; text-align: center;
+    }
+    .contact-photo {
+      width: 80px; height: 80px; border-radius: 50%; object-fit: cover;
+    }
+    .call-button {
+      background: #4f46e5; color: white; border: none; padding: 8px 16px;
+      border-radius: 30px; font-size: 0.9rem; width: 100%; margin-top: 4px;
+    }
+    .alert-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #dc2626; color: white; display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 1000;
+    }
+    .alert-text { font-size: 4.2rem; font-weight: 800; margin-bottom: 30px; }
+    .alert-close {
+      background: white; color: #dc2626; border: none; padding: 18px 36px;
+      border-radius: 30px; font-size: 1.6rem; width: 80%; max-width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <button class="sos-button" id="sosButton">🆘</button>
+    <button class="sos-button slideshow-toggle" id="slideshowToggle">🖼️</button>
+  </div>
+
+  <!-- ✅ Conteneur cliquable pour double-tap fiable -->
+  <div class="datetime-top" id="clockContainer">
+    <div id="clock">--:--</div>
+    <div id="date">Chargement...</div>
+  </div>
+
+  <div class="datetime-bottom" id="datetimeBottom">
+    <div id="slideshowClock">--:--</div>
+    <div id="slideshowDate">Chargement...</div>
+  </div>
+
+  <div id="slideshow" class="slideshow">
+    <img id="slideshowImage" src="" alt="Diaporama">
+  </div>
+
+  <div id="contactsGrid" class="contacts-grid"></div>
+
+  <div id="alertOverlay" class="alert-overlay">
+    <div class="alert-text" id="alertText">Médicaments !</div>
+    <button class="alert-close" onclick="closeAlert()">Fermer</button>
+  </div>
+
+  <button id="okButton" class="ok-button" style="position:fixed; bottom:20px; left:20px; z-index:101;">✅</button>
+
+  <script>
+    const CONFIG = {
+      contactsUrl: "https://gist.githubusercontent.com/benmanager/da95f2da3ec4ddaffc52e3bd34bfd378/raw/contacts.json",
+      photosUrl: "https://gist.githubusercontent.com/benmanager/4e4573f17ffe42055337add296f9dcf8/raw/photos.json",
+      alertsUrl: "https://gist.githubusercontent.com/benmanager/e82bd06a735c51e6bb40df788765af3f/raw/alerte.json",
+      remindersUrl: "https://gist.githubusercontent.com/benmanager/3dfb352e5785852810c404c4677609be/raw/rappels.json",
+      birthdaysUrl: "https://gist.githubusercontent.com/benmanager/4700824ff52de1824320cd4c6b307baa/raw/anniversaires.json",
+      displayUrl: "https://gist.githubusercontent.com/benmanager/a64159d00522573cee7e6f325832d40c/raw/display.json"
+    };
+
+    let slideshowActive = false;
+    let slideshowInterval = null;
+    let photos = [];
+    let slideshowDelay = 10000;
+    let settingsLoaded = false;
+    let photosLoaded = false;
+
+    // 🕒 Horloge
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('date').textContent = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+      document.getElementById('slideshowClock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('slideshowDate').textContent = now.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 🎨 Chargement settings
+    async function loadDisplaySettings() {
+      try {
+        const res = await fetch(CONFIG.displayUrl + "?t=" + Date.now());
+        const settings = await res.json();
+        slideshowDelay = settings.slideshowDelay ? parseInt(settings.slideshowDelay) * 1000 : 10000;
+        settingsLoaded = true;
+      } catch (e) { console.log("Pas de display.json"); settingsLoaded = true; }
+    }
+
+    // 🖼️ Chargement photos
+    async function loadPhotos() {
+      try {
+        const res = await fetch(CONFIG.photosUrl + "?t=" + Date.now());
+        const data = await res.json();
+        photos = data.photos || [];
+        photosLoaded = true;
+      } catch (e) { console.error("Photos:", e); photosLoaded = true; }
+    }
+
+    // ✅ DIAPORAMA : masque TOUT sauf l'horloge du bas
+    function startSlideshow() {
+      if (!photosLoaded || photos.length === 0) {
+        alert("⚠️ Aucune photo disponible. Vérifiez photos.json.");
+        return;
+      }
+      slideshowActive = true;
+      document.getElementById('slideshow').style.display = 'flex';
+      document.getElementById('datetimeBottom').style.display = 'block';
+      document.getElementById('datetime-top').style.display = 'none'; // ✅ Horloge HAUT masquée
+      document.getElementById('contactsGrid').style.display = 'none';
+
+      let index = 0;
+      document.getElementById('slideshowImage').src = photos[index];
+      clearInterval(slideshowInterval);
+      slideshowInterval = setInterval(() => {
+        index = (index + 1) % photos.length;
+        document.getElementById('slideshowImage').src = photos[index];
+      }, slideshowDelay);
+    }
+
+    function stopSlideshow() {
+      slideshowActive = false;
+      clearInterval(slideshowInterval);
+      document.getElementById('slideshow').style.display = 'none';
+      document.getElementById('datetimeBottom').style.display = 'none';
+      document.getElementById('datetime-top').style.display = 'block';
+      document.getElementById('contactsGrid').style.display = 'grid';
+    }
+
+    document.getElementById('slideshowToggle').addEventListener('click', () => {
+      if (slideshowActive) stopSlideshow();
+      else startSlideshow();
+    });
+
+    // 📞 Contacts
+    async function loadContacts() {
+      try {
+        const res = await fetch(CONFIG.contactsUrl + "?t=" + Date.now());
+        const data = await res.json();
+        const container = document.getElementById('contactsGrid');
+        container.innerHTML = (data.contacts || []).map(contact => `
+          <div class="contact-card">
+            <img src="${contact.photo || 'https://via.placeholder.com/80'}" class="contact-photo" onerror="this.src='https://via.placeholder.com/80?text=Photo'">
+            <div class="font-bold text-xl">${contact.name}</div>
+            ${contact.phone ? `<button class="call-button" onclick="callPhone('${contact.phone}')">📞</button>` : ''}
+            ${contact.video ? `<button class="call-button" onclick="callVideo('${contact.video}')">📹</button>` : ''}
+          </div>
+        `).join('');
+      } catch (e) { console.error("Contacts:", e); }
+    }
+
+    function callPhone(phone) {
+      const cleanPhone = phone.replace(/\+/g, '').replace(/\s/g, '');
+      window.open(`https://wa.me/${cleanPhone}`, '_blank');
+    }
+
+    function callVideo(url) {
+      if (url.startsWith('fb-messenger://')) {
+        window.location.href = url;
+      } else if (url.includes('wa.me')) {
+        callPhone(url.match(/wa\.me\/(\d+)/)?.[1] || '');
+      } else {
+        alert("⚠️ Format non pris en charge");
+      }
+    }
+
+    // 🚨 Alertes
+    let lastAlertTimestamp = 0;
+    async function checkManualAlert() {
+      try {
+        const res = await fetch(CONFIG.alertsUrl + "?t=" + Date.now());
+        const data = await res.json();
+        if (data.alert && data.timestamp > lastAlertTimestamp) {
+          lastAlertTimestamp = data.timestamp;
+          document.getElementById('alertText').textContent = data.alert;
+          document.getElementById('alertOverlay').style.display = 'flex';
+          const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+          audio.play().catch(() => {});
+          if ('speechSynthesis' in window) {
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(data.alert);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 0.9;
+            speechSynthesis.speak(utterance);
+          }
+        }
+      } catch (e) { console.error("Alerte:", e); }
+    }
+    setInterval(checkManualAlert, 5000);
+
+    function closeAlert() {
+      document.getElementById('alertOverlay').style.display = 'none';
+    }
+
+    // 🔐 DOUBLE-TAP SUR TABLETTE — ✅ FONCTIONNEL
+    let tapCount = 0;
+    const clockContainer = document.getElementById('clockContainer');
+
+    function handleDoubleTap() {
+      tapCount++;
+      setTimeout(() => { tapCount = 0; }, 600);
+      if (tapCount === 2) {
+        const sid = prompt("🔢 Twilio Account SID :", localStorage.getItem('twilio_sid') || '');
+        const token = prompt("🔑 Twilio Auth Token :", localStorage.getItem('twilio_token') || '');
+        const from = prompt("📞 Numéro Twilio :", localStorage.getItem('twilio_from') || '');
+        const to = prompt("📱 Ton numéro :", localStorage.getItem('twilio_to') || '');
+
+        if (sid && token && from && to) {
+          localStorage.setItem('twilio_sid', sid);
+          localStorage.setItem('twilio_token', token);
+          localStorage.setItem('twilio_from', from);
+          localStorage.setItem('twilio_to', to);
+          alert("✅ Paramètres sauvegardés !");
+        }
+      }
+    }
+
+    // ✅ Écoute universelle : tactile + souris
+    clockContainer.addEventListener('click', handleDoubleTap);
+    clockContainer.addEventListener('touchend', (e) => {
+      e.preventDefault(); // Empêche le zoom/sélect
+      handleDoubleTap();
+    });
+
+    // 📤 Twilio (avec avertissement CORS)
+    async function sendTwilioMessage(message) {
+      const sid = localStorage.getItem('twilio_sid');
+      const token = localStorage.getItem('twilio_token');
+      const from = localStorage.getItem('twilio_from');
+      const to = localStorage.getItem('twilio_to');
+
+      if (!sid || !token || !from || !to) {
+        alert("⚠️ Configurez Twilio (double-tap sur l’horloge).");
+        return;
+      }
+
+      try {
+        const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+        const data = new URLSearchParams({ To: to, From: from, Body: message });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Authorization': 'Basic ' + btoa(`${sid}:${token}`) },
+          body: data
+        });
+        if (!res.ok) throw new Error("Twilio refused");
+      } catch (e) {
+        console.error("Twilio échoue (CORS attendu)", e);
+        alert("❌ Twilio ne fonctionne pas depuis le navigateur.\n✅ Solution : utiliser WhatsApp ou un serveur intermédiaire.");
+      }
+    }
+
+    document.getElementById('sosButton').addEventListener('click', () => {
+      sendTwilioMessage("🚨 ALERTE URGENCE\nJe suis en danger.\nAdresse : 17 Avenue de la haute Borne 02600 Villers-Cotterêts");
+      document.getElementById('alertText').textContent = "ALERTE D'URGENCE ENVOYÉE !";
+      document.getElementById('alertOverlay').style.display = 'flex';
+    });
+
+    document.getElementById('okButton').addEventListener('click', () => {
+      sendTwilioMessage("✅ Je vais bien – Myrianne");
+      document.getElementById('okButton').innerHTML = '💙';
+      setTimeout(() => document.getElementById('okButton').innerHTML = '✅', 2000);
+    });
+
+    // 🚀 Démarrage
+    loadDisplaySettings();
+    loadPhotos();
+    loadContacts();
+  </script>
+</body>
+</html>
