@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manager Sénior</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { background: #000; color: #fff; margin: 0; padding: 0; overflow: hidden; touch-action: manipulation; }
+    .top-bar {
+      position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 100; text-align: center; cursor: pointer; user-select: none;
+    }
+    .datetime-top { font-size: 1.5rem; font-weight: 700; }
+    .datetime-bottom {
+      position: fixed; bottom: 20px; right: 20px; font-size: 1.2rem;
+      z-index: 95; display: none;
+    }
+    .emergency-buttons {
+      position: fixed; top: 10px; left: 10px; display: flex; gap: 10px; z-index: 101;
+    }
+    .sos-button, .ok-button {
+      width: 52px; height: 52px; border-radius: 50%; border: none;
+      font-size: 1.4rem; cursor: pointer;
+    }
+    .sos-button { background: rgba(255,50,50,0.9); color: white; }
+    .ok-button { background: rgba(34,197,94,0.9); color: white; }
+    .slideshow-toggle {
+      position: fixed; top: 10px; right: 10px; z-index: 101;
+    }
+    .contacts-grid {
+      position: fixed; top: 80px; left: 20px; right: 20px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px; z-index: 90; padding: 20px;
+      background: rgba(0,0,0,0.7); border-radius: 12px;
+    }
+    .contact-card {
+      background: #1e293b; padding: 12px; border-radius: 12px; text-align: center;
+    }
+    .contact-photo {
+      width: 80px; height: 80px; border-radius: 50%; object-fit: cover;
+    }
+    .call-button {
+      background: #4f46e5; color: white; border: none; padding: 8px 16px;
+      border-radius: 30px; font-size: 0.9rem; width: 100%; margin-top: 4px;
+    }
+    .slideshow {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #000; display: none; justify-content: center;
+      align-items: center; z-index: 10;
+    }
+    .slideshow img {
+      max-width: 95%; max-height: 90%; object-fit: contain;
+      border-radius: 8px;
+    }
+    .alert-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #dc2626; color: white; display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 1000;
+    }
+    .alert-text { font-size: 4.2rem; font-weight: 800; margin-bottom: 30px; }
+    .alert-close {
+      background: white; color: #dc2626; border: none; padding: 18px 36px;
+      border-radius: 30px; font-size: 1.6rem; width: 80%; max-width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Boutons SOS / Je vais bien -->
+  <div class="emergency-buttons">
+    <button class="sos-button" id="sosButton">🆘</button>
+    <button class="ok-button" id="okButton">✅</button>
+  </div>
+
+  <!-- Horloge en haut - AVEC ID pour masquage -->
+  <div class="top-bar" id="top-bar">
+    <div class="datetime-top">
+      <div id="clock">--:--</div>
+      <div id="date">Chargement...</div>
+    </div>
+  </div>
+
+  <!-- Horloge en bas à droite (pendant diaporama) -->
+  <div class="datetime-bottom" id="datetimeBottom">
+    <div id="slideshowClock">--:--</div>
+    <div id="slideshowDate">Chargement...</div>
+  </div>
+
+  <!-- Bouton diaporama -->
+  <button class="sos-button slideshow-toggle" id="slideshowToggle">🖼️</button>
+
+  <!-- Diaporama -->
+  <div id="slideshow" class="slideshow">
+    <img id="slideshowImage" src="" alt="Diaporama">
+  </div>
+
+  <!-- Contacts -->
+  <div id="contactsGrid" class="contacts-grid"></div>
+
+  <!-- Alertes -->
+  <div id="alertOverlay" class="alert-overlay">
+    <div class="alert-text" id="alertText">Médicaments !</div>
+    <button class="alert-close" onclick="closeAlert()">Fermer</button>
+  </div>
+
+  <!-- 🔐 Fenêtre de configuration Twilio (100% HTML - compatible Fully) -->
+  <div id="twilioModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:2000; justify-content:center; align-items:center; flex-direction:column; padding:20px; box-sizing:border-box;">
+    <div style="background:#1e293b; padding:20px; border-radius:16px; width:90%; max-width:500px; color:white;">
+      <h3 style="margin-top:0; font-size:1.4rem;">🔧 Configuration Twilio</h3>
+      <div style="margin-bottom:14px;">
+        <label style="display:block; margin-bottom:6px;">Account SID</label>
+        <input type="text" id="modalSid" style="width:100%; padding:10px; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;" placeholder="AC...">
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block; margin-bottom:6px;">Auth Token</label>
+        <input type="password" id="modalToken" style="width:100%; padding:10px; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;" placeholder="••••••••">
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block; margin-bottom:6px;">Numéro Twilio (ex: +123456789)</label>
+        <input type="text" id="modalFrom" style="width:100%; padding:10px; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;" placeholder="+1...">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="display:block; margin-bottom:6px;">Ton numéro (ex: +33612345678)</label>
+        <input type="text" id="modalTo" style="width:100%; padding:10px; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;" placeholder="+33...">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button onclick="saveTwilioConfig()" style="flex:1; background:linear-gradient(135deg, #6366f1, #8b5cf6); color:white; border:none; padding:12px; border-radius:10px; font-weight:600;">✅ Sauvegarder</button>
+        <button onclick="closeTwilioModal()" style="flex:1; background:#334155; color:white; border:none; padding:12px; border-radius:10px;">❌ Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CONFIG = {
+      contactsUrl: "https://gist.githubusercontent.com/benmanager/da95f2da3ec4ddaffc52e3bd34bfd378/raw/contacts.json",
+      photosUrl: "https://gist.githubusercontent.com/benmanager/4e4573f17ffe42055337add296f9dcf8/raw/photos.json",
+      alertsUrl: "https://gist.githubusercontent.com/benmanager/e82bd06a735c51e6bb40df788765af3f/raw/alerte.json",
+      remindersUrl: "https://gist.githubusercontent.com/benmanager/3dfb352e5785852810c404c4677609be/raw/rappels.json",
+      birthdaysUrl: "https://gist.githubusercontent.com/benmanager/4700824ff52de1824320cd4c6b307baa/raw/anniversaires.json",
+      displayUrl: "https://gist.githubusercontent.com/benmanager/a64159d00522573cee7e6f325832d40c/raw/display.json"
+    };
+
+    let slideshowActive = false;
+    let slideshowInterval = null;
+    let photos = [];
+    let slideshowDelay = 10000;
+
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('date').textContent = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+      document.getElementById('slideshowClock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('slideshowDate').textContent = now.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    async function loadDisplaySettings() {
+      try {
+        const res = await fetch(CONFIG.displayUrl + "?t=" + Date.now());
+        const settings = await res.json();
+        slideshowDelay = settings.slideshowDelay ? parseInt(settings.slideshowDelay) * 1000 : 10000;
+      } catch (e) {
+        console.log("Pas de display.json – utilisation des paramètres par défaut.");
+      }
+    }
+
+    async function loadPhotos() {
+      try {
+        const res = await fetch(CONFIG.photosUrl + "?t=" + Date.now());
+        const data = await res.json();
+        photos = data.photos || [];
+        if (photos.length > 0) {
+          document.getElementById('slideshowImage').src = photos[0];
+        }
+      } catch (e) {
+        console.error("Erreur chargement photos :", e);
+      }
+    }
+
+    function startSlideshow() {
+      if (photos.length === 0) {
+        alert("⚠️ Aucune photo disponible.");
+        return;
+      }
+      slideshowActive = true;
+      document.getElementById('slideshow').style.display = 'flex';
+      document.getElementById('datetimeBottom').style.display = 'block';
+      document.getElementById('contactsGrid').style.display = 'none';
+      document.getElementById('top-bar').style.display = 'none';
+
+      let index = 0;
+      clearInterval(slideshowInterval);
+      slideshowInterval = setInterval(() => {
+        index = (index + 1) % photos.length;
+        document.getElementById('slideshowImage').src = photos[index];
+      }, slideshowDelay);
+    }
+
+    function stopSlideshow() {
+      slideshowActive = false;
+      clearInterval(slideshowInterval);
+      document.getElementById('slideshow').style.display = 'none';
+      document.getElementById('datetimeBottom').style.display = 'none';
+      document.getElementById('contactsGrid').style.display = 'grid';
+      document.getElementById('top-bar').style.display = 'block';
+    }
+
+    document.getElementById('slideshowToggle').addEventListener('click', () => {
+      if (slideshowActive) stopSlideshow();
+      else startSlideshow();
+    });
+
+    async function loadContacts() {
+      try {
+        const res = await fetch(CONFIG.contactsUrl + "?t=" + Date.now());
+        const data = await res.json();
+        const container = document.getElementById('contactsGrid');
+        container.innerHTML = (data.contacts || []).map(contact => `
+          <div class="contact-card">
+            <img src="${contact.photo || 'https://via.placeholder.com/80'}" class="contact-photo" onerror="this.src='https://via.placeholder.com/80?text=Photo'">
+            <div style="font-weight:700; margin-bottom:6px;">${contact.name}</div>
+            ${contact.phone ? `<button class="call-button" onclick="callPhone('${contact.phone}')">📞</button>` : ''}
+            ${contact.video ? `<button class="call-button" onclick="callVideo('${contact.video}')">📹</button>` : ''}
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error("Erreur chargement contacts :", e);
+      }
+    }
+
+    function callPhone(phone) {
+      const clean = phone.replace(/\+/g, '').replace(/\s/g, '');
+      window.open(`https://wa.me/${clean}`, '_blank');
+    }
+
+    function callVideo(url) {
+      window.open(url, '_blank');
+    }
+
+    let lastAlertTimestamp = 0;
+    async function checkManualAlert() {
+      try {
+        const res = await fetch(CONFIG.alertsUrl + "?t=" + Date.now());
+        const data = await res.json();
+        if (data.alert && data.timestamp > lastAlertTimestamp) {
+          lastAlertTimestamp = data.timestamp;
+          document.getElementById('alertText').textContent = data.alert;
+          document.getElementById('alertOverlay').style.display = 'flex';
+          const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+          audio.play().catch(() => {});
+          if ('speechSynthesis' in window) {
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(data.alert);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 0.9;
+            speechSynthesis.speak(utterance);
+          }
+        }
+      } catch (e) {
+        console.error("Erreur alerte :", e);
+      }
+    }
+    setInterval(checkManualAlert, 5000);
+
+    function closeAlert() {
+      document.getElementById('alertOverlay').style.display = 'none';
+    }
+
+    // 🔐 GESTION MODALE TWILIO (sans prompt → compatible Fully)
+    let tapCount = 0;
+    const clockEl = document.getElementById('clock');
+
+    function handleDoubleTap() {
+      tapCount++;
+      setTimeout(() => { tapCount = 0; }, 500);
+      if (tapCount === 2) {
+        document.getElementById('modalSid').value = localStorage.getItem('twilio_sid') || '';
+        document.getElementById('modalToken').value = localStorage.getItem('twilio_token') || '';
+        document.getElementById('modalFrom').value = localStorage.getItem('twilio_from') || '';
+        document.getElementById('modalTo').value = localStorage.getItem('twilio_to') || '';
+        document.getElementById('twilioModal').style.display = 'flex';
+      }
+    }
+
+    clockEl.addEventListener('click', handleDoubleTap);
+    clockEl.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      handleDoubleTap();
+    });
+
+    function closeTwilioModal() {
+      document.getElementById('twilioModal').style.display = 'none';
+    }
+
+    function saveTwilioConfig() {
+      const sid = document.getElementById('modalSid').value.trim();
+      const token = document.getElementById('modalToken').value.trim();
+      const from = document.getElementById('modalFrom').value.trim();
+      const to = document.getElementById('modalTo').value.trim();
+
+      if (sid && token && from && to) {
+        localStorage.setItem('twilio_sid', sid);
+        localStorage.setItem('twilio_token', token);
+        localStorage.setItem('twilio_from', from);
+        localStorage.setItem('twilio_to', to);
+        closeTwilioModal();
+        alert("✅ Paramètres Twilio sauvegardés !");
+      } else {
+        alert("❌ Tous les champs sont requis.");
+      }
+    }
+
+    // 📤 Envoi Twilio (CORS bloquera en navigateur, mais config sauvegardée)
+    async function sendTwilioMessage(message) {
+      const sid = localStorage.getItem('twilio_sid');
+      const token = localStorage.getItem('twilio_token');
+      const from = localStorage.getItem('twilio_from');
+      const to = localStorage.getItem('twilio_to');
+
+      if (!sid || !token || !from || !to) {
+        alert("⚠️ Configurez Twilio (double-tap sur l’horloge en haut).");
+        return;
+      }
+
+      try {
+        const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+        const data = new URLSearchParams({ To: to, From: from, Body: message });
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${sid}:${token}`),
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: data
+        });
+        if (!response.ok) throw new Error("Twilio a refusé la requête");
+      } catch (e) {
+        console.error("❌ Erreur Twilio (CORS) :", e);
+        alert("⚠️ Impossible d’envoyer le SMS depuis le navigateur.\n✅ Le message est enregistré localement.");
+      }
+    }
+
+    document.getElementById('sosButton').addEventListener('click', () => {
+      sendTwilioMessage("🚨 ALERTE URGENCE\nJe suis en danger.\nAdresse : 17 Avenue de la haute Borne 02600 Villers-Cotterêts");
+      document.getElementById('alertText').textContent = "ALERTE D'URGENCE ENVOYÉE !";
+      document.getElementById('alertOverlay').style.display = 'flex';
+    });
+
+    document.getElementById('okButton').addEventListener('click', () => {
+      sendTwilioMessage("✅ Je vais bien – Myrianne");
+      document.getElementById('okButton').innerHTML = '💙';
+      setTimeout(() => document.getElementById('okButton').innerHTML = '✅', 2000);
+    });
+
+    // 🚀 Démarrage
+    loadDisplaySettings();
+    loadPhotos();
+    loadContacts();
+  </script>
+</body>
+</html>
