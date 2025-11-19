@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manager Sénior</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; transition: background-color 0.5s, color 0.5s; }
+    .top-bar {
+      position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 100; text-align: center; cursor: pointer; user-select: none;
+    }
+    .datetime-top { font-size: 1.5rem; font-weight: 700; }
+    .datetime-bottom {
+      position: fixed; bottom: 20px; right: 20px; font-size: 1.2rem;
+      z-index: 95; display: none;
+    }
+    .emergency-buttons {
+      position: fixed; top: 10px; left: 10px; display: flex; gap: 10px; z-index: 101;
+    }
+    .sos-button, .ok-button {
+      width: 52px; height: 52px; border-radius: 50%; border: none;
+      font-size: 1.4rem; cursor: pointer;
+    }
+    .sos-button { background: rgba(255,50,50,0.9); color: white; }
+    .ok-button { background: rgba(34,197,94,0.9); color: white; }
+    .slideshow-toggle {
+      position: fixed; top: 10px; right: 10px; z-index: 101;
+    }
+    .contacts-grid {
+      position: fixed; top: 80px; left: 20px; right: 20px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px; z-index: 90; padding: 20px;
+      background: rgba(0,0,0,0.7); border-radius: 12px;
+    }
+    .contact-card {
+      padding: 12px; border-radius: 12px; text-align: center;
+    }
+    .contact-photo {
+      width: 80px; height: 80px; border-radius: 50%; object-fit: cover;
+    }
+    .call-button {
+      border: none; padding: 8px 16px;
+      border-radius: 30px; font-size: 0.9rem; width: 100%; margin-top: 4px;
+    }
+    .slideshow {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: none; justify-content: center;
+      align-items: center; z-index: 10;
+    }
+    .slideshow img {
+      max-width: 95%; max-height: 90%; object-fit: contain;
+      border-radius: 8px;
+    }
+    .alert-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 1000;
+    }
+    .alert-text { font-size: 4.2rem; font-weight: 800; margin-bottom: 30px; }
+    .alert-close {
+      border: none; padding: 18px 36px;
+      border-radius: 30px; font-size: 1.6rem; width: 80%; max-width: 500px;
+    }
+
+    /* Dynamique */
+    #birthdayAlert {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #8b5cf6; color: white; display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 1000;
+    }
+    #reminderAlert {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #0ea5e9; color: white; display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body id="mainBody">
+  <!-- Boutons SOS / Je vais bien -->
+  <div class="emergency-buttons">
+    <button class="sos-button" id="sosButton">🆘</button>
+    <button class="ok-button" id="okButton">✅</button>
+  </div>
+
+  <!-- Horloge en haut -->
+  <div class="top-bar" id="top-bar">
+    <div class="datetime-top">
+      <div id="clock">--:--</div>
+      <div id="date">Chargement...</div>
+    </div>
+  </div>
+
+  <!-- Horloge en bas à droite (diaporama) -->
+  <div class="datetime-bottom" id="datetimeBottom">
+    <div id="slideshowClock">--:--</div>
+    <div id="slideshowDate">Chargement...</div>
+  </div>
+
+  <!-- Bouton diaporama -->
+  <button class="sos-button slideshow-toggle" id="slideshowToggle">🖼️</button>
+
+  <!-- Diaporama -->
+  <div id="slideshow" class="slideshow">
+    <img id="slideshowImage" src="" alt="Diaporama">
+  </div>
+
+  <!-- Contacts -->
+  <div id="contactsGrid" class="contacts-grid"></div>
+
+  <!-- Alertes SOS -->
+  <div id="alertOverlay" class="alert-overlay">
+    <div class="alert-text" id="alertText">Médicaments !</div>
+    <button class="alert-close" onclick="closeAlert()">Fermer</button>
+  </div>
+
+  <!-- Anniversaire -->
+  <div id="birthdayAlert" class="alert-overlay">
+    <div class="alert-text" id="birthdayText">Joyeux anniversaire !</div>
+    <button class="alert-close" onclick="closeBirthday()">Fermer</button>
+  </div>
+
+  <!-- Rappel -->
+  <div id="reminderAlert" class="alert-overlay">
+    <div class="alert-text" id="reminderText">Rappel</div>
+    <button class="alert-close" onclick="closeReminder()">Fermer</button>
+  </div>
+
+  <!-- Fenêtre de config numéro -->
+  <div id="phoneModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:2000; justify-content:center; align-items:center; flex-direction:column; padding:20px; box-sizing:border-box;">
+    <div style="background:#1e293b; padding:20px; border-radius:16px; width:90%; max-width:500px; color:white;">
+      <h3 style="margin-top:0; font-size:1.4rem;">📞 Numéro pour les alertes</h3>
+      <div style="margin-bottom:20px;">
+        <label style="display:block; margin-bottom:6px;">Ton numéro (ex: +33612345678)</label>
+        <input type="text" id="modalTo" style="width:100%; padding:10px; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;" placeholder="+33...">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button onclick="savePhoneConfig()" style="flex:1; background:linear-gradient(135deg, #6366f1, #8b5cf6); color:white; border:none; padding:12px; border-radius:10px; font-weight:600;">✅ Sauvegarder</button>
+        <button onclick="closePhoneModal()" style="flex:1; background:#334155; color:white; border:none; padding:12px; border-radius:10px;">❌ Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CONFIG = {
+      contactsUrl: "https://gist.githubusercontent.com/benmanager/da95f2da3ec4ddaffc52e3bd34bfd378/raw/contacts.json",
+      photosUrl: "https://gist.githubusercontent.com/benmanager/4e4573f17ffe42055337add296f9dcf8/raw/photos.json",
+      alertsUrl: "https://gist.githubusercontent.com/benmanager/e82bd06a735c51e6bb40df788765af3f/raw/alerte.json",
+      remindersUrl: "https://gist.githubusercontent.com/benmanager/3dfb352e5785852810c404c4677609be/raw/rappels.json",
+      birthdaysUrl: "https://gist.githubusercontent.com/benmanager/4700824ff52de1824320cd4c6b307baa/raw/anniversaires.json",
+      displayUrl: "https://gist.githubusercontent.com/benmanager/a64159d00522573cee7e6f325832d40c/raw/display.json"
+    };
+
+    let slideshowActive = false;
+    let slideshowInterval = null;
+    let photos = [];
+    let slideshowDelay = 10000;
+    let currentBgColor = "#000000";
+    let currentFontColor = "#ffffff";
+
+    // 🎨 Appliquer le thème
+    function applyTheme(bgColor, fontSize) {
+      const body = document.getElementById('mainBody');
+      body.style.backgroundColor = bgColor;
+      currentBgColor = bgColor;
+
+      // Couleur police adaptative
+      const brightness = (parseInt(bgColor.substr(1,2),16) + parseInt(bgColor.substr(3,2),16) + parseInt(bgColor.substr(5,2),16)) / 3;
+      currentFontColor = brightness > 128 ? "#000000" : "#ffffff";
+
+      body.style.color = currentFontColor;
+
+      // Appliquer à tous les éléments
+      document.querySelectorAll('.contact-card, .alert-overlay, #birthdayAlert, #reminderAlert, .datetime-top, .datetime-bottom').forEach(el => {
+        el.style.color = currentFontColor;
+        if (el.classList.contains('contact-card')) {
+          el.style.backgroundColor = brightness > 128 ? "#f1f5f9" : "#1e293b";
+        }
+      });
+
+      // Couleur boutons adaptative
+      const buttonColor = brightness > 128 ? "rgba(33,150,243,0.9)" : "rgba(34,197,94,0.9)";
+      document.querySelectorAll('.call-button').forEach(btn => {
+        btn.style.backgroundColor = buttonColor;
+        btn.style.color = brightness > 128 ? "#ffffff" : "#ffffff";
+      });
+    }
+
+    // 🕒 Horloge
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('date').textContent = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+      document.getElementById('slideshowClock').textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('slideshowDate').textContent = now.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 🎨 Chargement affichage
+    async function loadDisplaySettings() {
+      try {
+        const res = await fetch(CONFIG.displayUrl + "?t=" + Date.now());
+        const settings = await res.json();
+        slideshowDelay = settings.slideshowDelay ? parseInt(settings.slideshowDelay) * 1000 : 10000;
+        const bgColor = settings.bgColor || '#000000';
+        const fontSize = settings.fontSize || 'normal';
+        applyTheme(bgColor, fontSize);
+      } catch (e) {
+        applyTheme('#000000', 'normal');
+      }
+    }
+
+    // 🖼️ Photos
+    async function loadPhotos() {
+      try {
+        const res = await fetch(CONFIG.photosUrl + "?t=" + Date.now());
+        const data = await res.json();
+        photos = data.photos || [];
+        if (photos.length > 0) {
+          document.getElementById('slideshowImage').src = photos[0];
+        }
+      } catch (e) {
+        console.error("Photos:", e);
+      }
+    }
+
+    // 📞 Contacts
+    async function loadContacts() {
+      try {
+        const res = await fetch(CONFIG.contactsUrl + "?t=" + Date.now());
+        const data = await res.json();
+        const container = document.getElementById('contactsGrid');
+        const brightness = (parseInt(currentBgColor.substr(1,2),16) + parseInt(currentBgColor.substr(3,2),16) + parseInt(currentBgColor.substr(5,2),16)) / 3;
+        const cardBg = brightness > 128 ? "#f1f5f9" : "#1e293b";
+        const textColor = currentFontColor;
+        const buttonColor = brightness > 128 ? "#2196f3" : "#4f46e5";
+
+        container.innerHTML = (data.contacts || []).map(contact => `
+          <div class="contact-card" style="background:${cardBg}; color:${textColor};">
+            <img src="${contact.photo || 'https://via.placeholder.com/80'}" class="contact-photo" onerror="this.src='https://via.placeholder.com/80?text=Photo'">
+            <div style="font-weight:700; margin-bottom:6px;">${contact.name}</div>
+            ${contact.phone ? `<button class="call-button" style="background:${buttonColor}; color:white;" onclick="callPhone('${contact.phone}')">📞</button>` : ''}
+            ${contact.messenger || contact.video ? `<button class="call-button" style="background:${buttonColor}; color:white;" onclick="callVideo('${contact.messenger || contact.video}')">📹</button>` : ''}
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error("Contacts:", e);
+      }
+    }
+
+    // 📞 Appels
+    function callPhone(phone) {
+      if (phone.startsWith('http')) {
+        window.location.href = phone;
+      } else {
+        const clean = phone.replace(/\D/g, '');
+        window.location.href = `https://wa.me/${clean}`;
+      }
+    }
+
+    function callVideo(url) {
+      if (!url.startsWith('http')) url = 'https://' + url;
+      window.location.href = url;
+    }
+
+    // 🚨 Alertes manuelles
+    let lastAlertTimestamp = 0;
+    async function checkManualAlert() {
+      try {
+        const res = await fetch(CONFIG.alertsUrl + "?t=" + Date.now());
+        const data = await res.json();
+        if (data.alert && data.timestamp > lastAlertTimestamp) {
+          lastAlertTimestamp = data.timestamp;
+          document.getElementById('alertText').textContent = data.alert;
+          document.getElementById('alertOverlay').style.display = 'flex';
+          document.getElementById('alertOverlay').style.background = '#dc2626';
+          const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+          audio.play().catch(() => {});
+          if ('speechSynthesis' in window) {
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(data.alert);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 0.9;
+            speechSynthesis.speak(utterance);
+          }
+        }
+      } catch (e) {
+        console.error("Alerte:", e);
+      }
+    }
+    setInterval(checkManualAlert, 5000);
+
+    // 🎂 Anniversaires
+    let lastBirthdayCheck = null;
+    async function checkBirthdays() {
+      const today = new Date();
+      const todayStr = `${today.getMonth() + 1}-${today.getDate()}`;
+
+      if (lastBirthdayCheck === todayStr) return;
+
+      try {
+        const res = await fetch(CONFIG.birthdaysUrl + "?t=" + Date.now());
+        const data = await res.json();
+        const todayBirthdays = (data.birthdays || []).filter(b => {
+          const bDate = new Date(b.birthdayDate);
+          return (bDate.getMonth() + 1) + '-' + bDate.getDate() === todayStr;
+        });
+
+        if (todayBirthdays.length > 0) {
+          lastBirthdayCheck = todayStr;
+          document.getElementById('birthdayText').textContent = `🎂 Joyeux anniversaire ${todayBirthdays[0].birthdayName} !`;
+          document.getElementById('birthdayAlert').style.display = 'flex';
+          const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+          audio.play().catch(() => {});
+        }
+      } catch (e) {
+        console.error("Anniversaires:", e);
+      }
+    }
+    setInterval(checkBirthdays, 60000); // Vérifie toutes les minutes
+
+    // 🔔 Rappels
+    let lastReminderCheck = null;
+    async function checkReminders() {
+      const now = new Date();
+      const nowTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const today = now.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase();
+      const todayShort = now.toLocaleDateString('fr-FR', { weekday: 'short' }).toLowerCase();
+
+      // Clé unique pour éviter répétition
+      const checkKey = nowTime + '-' + today;
+
+      if (lastReminderCheck === checkKey) return;
+
+      try {
+        const res = await fetch(CONFIG.remindersUrl + "?t=" + Date.now());
+        const data = await res.json();
+        const matching = (data.reminders || []).find(r => {
+          const jourMatch = r.jour === 'tous' || r.jour.toLowerCase() === today || r.jour.toLowerCase() === todayShort;
+          return r.heure === nowTime && jourMatch;
+        });
+
+        if (matching) {
+          lastReminderCheck = checkKey;
+          document.getElementById('reminderText').textContent = matching.texte;
+          document.getElementById('reminderAlert').style.display = 'flex';
+          document.getElementById('reminderAlert').style.background = '#0ea5e9';
+          const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+          audio.play().catch(() => {});
+          if ('speechSynthesis' in window) {
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(matching.texte);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 0.9;
+            speechSynthesis.speak(utterance);
+          }
+        }
+      } catch (e) {
+        console.error("Rappels:", e);
+      }
+    }
+    setInterval(checkReminders, 60000); // Vérifie toutes les minutes
+
+    // ✅ Diaporama
+    function startSlideshow() {
+      if (photos.length === 0) return;
+      slideshowActive = true;
+      document.getElementById('slideshow').style.display = 'flex';
+      document.getElementById('datetimeBottom').style.display = 'block';
+      document.getElementById('contactsGrid').style.display = 'none';
+      document.getElementById('top-bar').style.display = 'none';
+
+      let index = 0;
+      document.getElementById('slideshowImage').src = photos[index];
+      clearInterval(slideshowInterval);
+      slideshowInterval = setInterval(() => {
+        index = (index + 1) % photos.length;
+        document.getElementById('slideshowImage').src = photos[index];
+      }, slideshowDelay);
+    }
+
+    function stopSlideshow() {
+      slideshowActive = false;
+      clearInterval(slideshowInterval);
+      document.getElementById('slideshow').style.display = 'none';
+      document.getElementById('datetimeBottom').style.display = 'none';
+      document.getElementById('contactsGrid').style.display = 'grid';
+      document.getElementById('top-bar').style.display = 'block';
+    }
+
+    document.getElementById('slideshowToggle').addEventListener('click', () => {
+      if (slideshowActive) stopSlideshow();
+      else startSlideshow();
+    });
+
+    // ✅ Fermeture alertes
+    function closeAlert() { document.getElementById('alertOverlay').style.display = 'none'; }
+    function closeBirthday() { document.getElementById('birthdayAlert').style.display = 'none'; }
+    function closeReminder() { document.getElementById('reminderAlert').style.display = 'none'; }
+
+    // 🔐 Config numéro
+    let tapCount = 0;
+    const clockEl = document.getElementById('clock');
+    function handleDoubleTap() {
+      tapCount++;
+      setTimeout(() => { tapCount = 0; }, 500);
+      if (tapCount === 2) {
+        document.getElementById('modalTo').value = localStorage.getItem('emergency_phone') || '';
+        document.getElementById('phoneModal').style.display = 'flex';
+      }
+    }
+    clockEl.addEventListener('click', handleDoubleTap);
+    clockEl.addEventListener('touchend', (e) => { e.preventDefault(); handleDoubleTap(); });
+
+    function closePhoneModal() { document.getElementById('phoneModal').style.display = 'none'; }
+    function savePhoneConfig() {
+      const to = document.getElementById('modalTo').value.trim();
+      if (to) {
+        localStorage.setItem('emergency_phone', to);
+        closePhoneModal();
+        alert("✅ Numéro sauvegardé !");
+      } else {
+        alert("❌ Veuillez entrer un numéro.");
+      }
+    }
+
+    // 📤 WhatsApp
+    function sendEmergencyMessage(message) {
+      const to = localStorage.getItem('emergency_phone');
+      if (!to) {
+        alert("⚠️ Configurez le numéro (double-tap sur l’horloge).");
+        return;
+      }
+      const clean = to.replace(/\D/g, '');
+      const url = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+      window.location.href = url;
+    }
+
+    document.getElementById('sosButton').addEventListener('click', () => {
+      sendEmergencyMessage("🚨 ALERTE URGENCE\nJe suis en danger.\nAdresse : 17 Avenue de la haute Borne 02600 Villers-Cotterêts");
+      document.getElementById('alertText').textContent = "ALERTE D'URGENCE ENVOYÉE !";
+      document.getElementById('alertOverlay').style.display = 'flex';
+      document.getElementById('alertOverlay').style.background = '#dc2626';
+    });
+
+    document.getElementById('okButton').addEventListener('click', () => {
+      sendEmergencyMessage("✅ Je vais bien – Myrianne");
+      document.getElementById('okButton').innerHTML = '💙';
+      setTimeout(() => document.getElementById('okButton').innerHTML = '✅', 2000);
+    });
+
+    // 🚀 Démarrage
+    loadDisplaySettings();
+    loadPhotos();
+    loadContacts();
+  </script>
+</body>
+</html>
