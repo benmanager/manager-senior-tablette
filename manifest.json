@@ -1,0 +1,20 @@
+{
+  "short_name": "Admin Famille",
+  "name": "Admin Famille • Manager Sénior",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "admin-famille.html",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#6366f1"
+}
